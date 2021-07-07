@@ -13,10 +13,14 @@ class Properties: # Floor Properties
     extra_hallways = 0
     secondary_density = 10
     empty_mh_chance = 0
+    enemy_density = 0
+    item_density = 0
+    buried_item_density = 0
+    trap_density = 0
 
 class TileData:
     TRANS_TABLE = {0x0: "terrain_flags",
-                   0x2: "map_flags",
+                   0x2: "spawn_flags",
                    0x4: "tex_index",
                    0x6: "unk1",
                    0x7: "room_index",
@@ -50,8 +54,13 @@ class StaticParam:
     MERGE_CHANCE = 5 # Originally 5%
     IMPERFECT_CHANCE = 60 # Originally 60%
     SECONDARY_CHANCE = 80 # Originally 80%
+    MH_NORMAL_SPAWN_ENM = 20 # Originally 20
+    MH_NORMAL_SPAWN_ITEM = 7 # Originally 7
+    MH_MIN_TRAP_DUNGEON = 28 # Originally 28
     PATCH_APPLIED = 0
     FIX_OUTER_ROOM_ERROR = 0
+    SHOW_ERROR = 0
+    
     DEFAULT_TILE = TileData()
 
     #US: 0235171C
@@ -71,8 +80,15 @@ class StaticParam:
 
 class DungeonData: # Dungeon structure
     maze_value = 0
-    unknown_798 = 0
-    mh_room = 0 #0x40C9
+    dungeon_number = 1 #0x748
+    floor_dungeon_number = 1 #0x749
+    unknown_751 = 1 #0x751
+    free_mode = 1 #0x75C
+    unknown_798 = 0 #0x798
+    create_mh = 0 #0x40C4
+    mh_room = -1 #0x40C9
+    hidden_stairs_type = 0 #0x40CC
+    fixed_floor_number = 0 #0x40DA
     mission_flag = 0 #0x760
     mission_type_1 = 0 #0x761
     mission_type_2 = 0 #0x762
@@ -80,31 +96,37 @@ class DungeonData: # Dungeon structure
     player_spawn_y = -1 #0xCCE2
     stairs_spawn_x = -1 #0xCCE4
     stairs_spawn_y = -1 #0xCCE6
+    hidden_stairs_spawn_x = -1 #0xCCE8
+    hidden_stairs_spawn_y = -1 #0xCCEA
     kecleon_shop_min_x = 0 #0xCD14
     kecleon_shop_min_y = 0 #0xCD18
     kecleon_shop_max_x = 0 #0xCD1C
     kecleon_shop_max_y = 0 #0xCD20
-    floor_dungeon_number = 1 #0x749
-    unknown_751 = 1 #0x751
-    create_mh = 0 #0x40C4
-    fixed_floor_number = 0 #0x40DA
+    nb_items = 0 #0x12AFA
+    guaranteed_item_id = 0 #0x2C9E8
+    floor_dungeon_max = 2 #0x2CAF4
     def clear_tiles():
         DungeonData.list_tiles = [[TileData() for y in range(32)] for z in range(56)]
 
 class StatusData: # Status structure 0237CFBC
-    unk_val_0 = 0
+    second_spawn = 0 #0x0
     has_monster_house = 0 #0x1
+    stairs_room = 0 #0x2
     has_kecleon_shop = 0 #0x3
     is_not_valid = 0 #0x5
     floor_size = 0 #0x6
     has_maze = 0 #0x7
+    no_enemy_spawn = 0 #0x8
     kecleon_chance = 100 #0xC
     mh_chance = 0 #0x10
     nb_rooms = 0 #0x14
     middle_room_secondary = 0 #0x18
+    hidden_stairs_spawn_x = 0 #0x1C
+    hidden_stairs_spawn_y = 0 #0x1E
     kecleon_shop_middle_x = 0 #0x20
     kecleon_shop_middle_y = 0 #0x22
     unk_val_24 = 0 #0x24
+    hidden_stairs_type = 0 #0x2C
     kecleon_shop_min_x = 0 #0x30
     kecleon_shop_min_y = 0 #0x34
     kecleon_shop_max_x = 0 #0x38
@@ -255,7 +277,7 @@ def place_rooms(grid, max_nb_room_x, max_nb_room_y, nb_rooms):
             if ok:
                 break
         attempts += 1
-    StatusData.unk_val_0 = 0
+    StatusData.second_spawn = 0
 
 #US: 0233D318
 def create_rooms(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, flags):
@@ -1870,13 +1892,238 @@ def generate_maze():
                 DungeonData.list_tiles[x][y][0] |= 1
                 DungeonData.list_tiles[x][y][7] = 0x4
 
+#US: 02342C8C
+def generate_stairs(spawn, hidden_stairs):
+    x = spawn[0]
+    y = spawn[1]
+    DungeonData.list_tiles[x][y][2]|=0x1
+    DungeonData.list_tiles[x][y][2]&=~0x2
+    if not hidden_stairs:
+        DungeonData.stairs_spawn_x = x
+        DungeonData.stairs_spawn_y = y
+        StatusData.stairs_room = DungeonData.list_tiles[x][y][7]
+    else:
+        if StatusData.second_spawn:
+            StatusData.hidden_stairs_spawn_x = x
+            StatusData.hidden_stairs_spawn_y = y
+        else:
+            DungeonData.hidden_stairs_spawn_x = x
+            DungeonData.hidden_stairs_spawn_y = y
+            DungeonData.hidden_stairs_type = hidden_stairs
+    if not hidden_stairs and get_floor_type()==2:
+        room = DungeonData.list_tiles[x][y][7]
+        for x in range(56):
+            for y in range(32):
+                if DungeonData.list_tiles[x][y][0]&3==1 and DungeonData.list_tiles[x][y][7]==room:
+                    DungeonData.list_tiles[x][y][0]|=0x40
+                    DungeonData.mh_room = DungeonData.list_tiles[x][y][7]
+        
 #US: 02340D4C
-def generate_spawns1(prop, empty):
+def generate_item_spawns(prop, empty):
+    if DungeonData.stairs_spawn_x==-1 or DungeonData.stairs_spawn_y==-1:
+        valid_spawns = []
+        for x in range(56):
+            for y in range(32):
+                if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
+                    and DungeonData.list_tiles[x][y][2]&0x8==0 and DungeonData.list_tiles[x][y][2]&0x10==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
+                     and DungeonData.list_tiles[x][y][0]&0x100==0:
+                    valid_spawns.append((x, y))
+        if len(valid_spawns)>0:
+            stairs = randrange(len(valid_spawns))
+            generate_stairs(valid_spawns[stairs], 0)
+            if not StatusData.hidden_stairs_type:
+                del valid_spawns[stairs]
+                if DungeonData.floor_dungeon_number<DungeonData.floor_dungeon_max:
+                    #US: Call to 022EAC4C(3)
+                    stairs = randrange(len(valid_spawns))
+                    generate_stairs(valid_spawns[stairs], StatusData.hidden_stairs_type)
+                    #US: Call to 022EAC64()
+    valid_spawns = []
+    for x in range(56):
+        for y in range(32):
+            if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
+                and DungeonData.list_tiles[x][y][0]&0x40==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
+                 and DungeonData.list_tiles[x][y][0]&0x100==0:
+                valid_spawns.append((x, y))
+    if len(valid_spawns)>0:
+        nb_items = prop.item_density
+        if nb_items!=0:
+            nb_items = max(randrange(nb_items-2,nb_items+2), 1)
+        if DungeonData.guaranteed_item_id!=0:
+            nb_items += 1
+        DungeonData.nb_items = nb_items+1
+        if nb_items+1>0:
+            for i in range(len(valid_spawns)):
+                a = randrange(len(valid_spawns))
+                b = randrange(len(valid_spawns))
+                tmp = valid_spawns[a]
+                valid_spawns[a] = valid_spawns[b]
+                valid_spawns[b] = tmp
+            start = randrange(len(valid_spawns))
+            nb_items += 1
+            for i in range(nb_items):
+                c = valid_spawns[start]
+                start += 1
+                if start==len(valid_spawns):
+                    start = 0
+                DungeonData.list_tiles[c[0]][c[1]][2]|=0x2
+    valid_spawns = []
+    for x in range(56):
+        for y in range(32):
+            if DungeonData.list_tiles[x][y][0]&0x3==0:
+                valid_spawns.append((x, y))
+    if len(valid_spawns)>0:
+        nb_items = prop.buried_item_density
+        if nb_items!=0:
+            nb_items = max(randrange(nb_items-2,nb_items+2), 1)
+        if nb_items>0:
+            for i in range(len(valid_spawns)):
+                a = randrange(len(valid_spawns))
+                b = randrange(len(valid_spawns))
+                tmp = valid_spawns[a]
+                valid_spawns[a] = valid_spawns[b]
+                valid_spawns[b] = tmp
+            start = randrange(len(valid_spawns))
+            nb_items += 1
+            for i in range(nb_items):
+                c = valid_spawns[start]
+                start += 1
+                if start==len(valid_spawns):
+                    start = 0
+                DungeonData.list_tiles[c[0]][c[1]][2]|=0x2
+    valid_spawns = []
+    if not empty:
+        for x in range(56):
+            for y in range(32):
+                if DungeonData.list_tiles[x][y][0]&0x20==0 and DungeonData.list_tiles[x][y][0]&0x40:
+                    valid_spawns.append((x, y))
+    if len(valid_spawns)>0:
+        nb_items = max(6, randrange((5*len(valid_spawns))//10, (8*len(valid_spawns))//10))
+        if nb_items>=StaticParam.MH_NORMAL_SPAWN_ITEM:
+            nb_items = StaticParam.MH_NORMAL_SPAWN_ITEM
+        for i in range(len(valid_spawns)):
+            a = randrange(len(valid_spawns))
+            b = randrange(len(valid_spawns))
+            tmp = valid_spawns[a]
+            valid_spawns[a] = valid_spawns[b]
+            valid_spawns[b] = tmp
+        start = randrange(len(valid_spawns))
+        for i in range(nb_items):
+            c = valid_spawns[start]
+            start += 1
+            if start==len(valid_spawns):
+                start = 0
+            if randrange(2)==1:
+                DungeonData.list_tiles[c[0]][c[1]][2]|=0x2
+            elif DungeonData.free_mode or DungeonData.dungeon_number>=StaticParam.MH_MIN_TRAP_DUNGEON:
+                DungeonData.list_tiles[c[0]][c[1]][2]|=0x4
+        
+    valid_spawns = []
+    for x in range(56):
+        for y in range(32):
+            if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
+                and DungeonData.list_tiles[x][y][0]&0x2==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
+                 and DungeonData.list_tiles[x][y][0]&0x100==0:
+                valid_spawns.append((x, y))
+    if len(valid_spawns)>0:
+        nb_traps = randrangeswap(prop.trap_density//2, prop.trap_density)
+        if nb_traps>0:
+            if nb_traps >= 56:
+                nb_traps = 56
+            for i in range(len(valid_spawns)):
+                a = randrange(len(valid_spawns))
+                b = randrange(len(valid_spawns))
+                tmp = valid_spawns[a]
+                valid_spawns[a] = valid_spawns[b]
+                valid_spawns[b] = tmp
+            start = randrange(len(valid_spawns))
+            for i in range(nb_traps):
+                c = valid_spawns[start]
+                start += 1
+                if start==len(valid_spawns):
+                    start = 0
+                DungeonData.list_tiles[c[0]][c[1]][2]|=0x4
+    if get_floor_type()==2:
+        flag = True
+    else:
+        flag = False
+    valid_spawns = []
+    if DungeonData.player_spawn_x==-1 or DungeonData.player_spawn_y==-1:
+        for x in range(56):
+            for y in range(32):
+                if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
+                    and DungeonData.list_tiles[x][y][0]&0x8==0 and DungeonData.list_tiles[x][y][0]&0x100==0 \
+                    and DungeonData.list_tiles[x][y][2]&0x2==0 and DungeonData.list_tiles[x][y][2]&0x8==0 and DungeonData.list_tiles[x][y][2]&0x4==0:
+                    if not flag or DungeonData.list_tiles[x][y][2]&0x1==0:
+                        valid_spawns.append((x, y))
+        if len(valid_spawns)>0:
+            spawn = valid_spawns[randrange(len(valid_spawns))]
+            DungeonData.player_spawn_x = spawn[0]
+            DungeonData.player_spawn_y = spawn[1]
     return #TODO
 
 #US: 02341470
-def generate_spawns2(prop, empty):
-    return #TODO
+def generate_monster_spawns(prop, empty):
+    valid_spawns = []
+    if prop.enemy_density<1:
+        enemies = abs(prop.enemy_density)
+    else:
+        enemies = randrange(prop.enemy_density//2, prop.enemy_density)
+        if enemies<1:
+            enemies = 1
+    for x in range(56):
+        for y in range(32):
+            if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
+                and DungeonData.list_tiles[x][y][2]&0x2==0 and DungeonData.list_tiles[x][y][2]&0x1==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
+                 and DungeonData.list_tiles[x][y][0]&0x100==0:
+                if DungeonData.player_spawn_x!=x or DungeonData.player_spawn_y!=y:
+                    if StatusData.has_monster_house==0 or DungeonData.mh_room!=DungeonData.list_tiles[x][y][7]:
+                        valid_spawns.append((x, y))
+    if len(valid_spawns)>0 and enemies+1>0:
+        for i in range(len(valid_spawns)):
+            a = randrange(len(valid_spawns))
+            b = randrange(len(valid_spawns))
+            tmp = valid_spawns[a]
+            valid_spawns[a] = valid_spawns[b]
+            valid_spawns[b] = tmp
+        enemies += 1
+        start = randrange(len(valid_spawns))
+        for i in range(enemies):
+            c = valid_spawns[start]
+            start += 1
+            if start==len(valid_spawns):
+                start = 0
+            DungeonData.list_tiles[c[0]][c[1]][2]|=0x8
+    if DungeonData.create_mh:
+        valid_spawns = []
+        mh_spawn = StaticParam.MH_NORMAL_SPAWN_ENM
+        if empty:
+            mh_spawn = 3
+        if DungeonData.create_mh:
+            mh_spawn = (mh_spawn*3)//2
+        for x in range(56):
+            for y in range(32):
+                if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
+                   and DungeonData.list_tiles[x][y][0]&0x100==0 and DungeonData.list_tiles[x][y][0]&0x40==0:
+                    if DungeonData.player_spawn_x!=x or DungeonData.player_spawn_y!=y:
+                        valid_spawns.append((x, y))
+        if len(valid_spawns)>0:
+            enemies = max(1, randrange((7*len(valid_spawns))//10, (8*len(valid_spawns))//10))
+            if enemies>=mh_spawn:
+                enemies = mh_spawn
+            for i in range(len(valid_spawns)):
+                a = randrange(len(valid_spawns))
+                b = randrange(len(valid_spawns))
+                tmp = valid_spawns[a]
+                valid_spawns[a] = valid_spawns[b]
+                valid_spawns[b] = tmp
+            start = randrange(len(valid_spawns))
+            for i in range(enemies):
+                c = valid_spawns[start]
+                start += 1
+                if start==len(valid_spawns):
+                    start = 0
+                DungeonData.list_tiles[c[0]][c[1]][2]|=0x8
 
 #US: 02340974
 def clear_safe():
@@ -1954,6 +2201,7 @@ def generate_floor():
     StatusData.mh_chance = Properties.mh_chance
     StatusData.kecleon_chance = Properties.kecleon_chance
     StatusData.middle_room_secondary = Properties.middle_room_secondary
+    StatusData.middle_room_secondary = Properties.middle_room_secondary
     gen_attempts2 = 0
     while gen_attempts2<10:
         gen_attempts = 0
@@ -1963,6 +2211,12 @@ def generate_floor():
             StatusData.is_not_valid = 0
             StatusData.kecleon_shop_middle_x = -1
             StatusData.kecleon_shop_middle_y = -1
+            DungeonData.player_spawn_x = -1
+            DungeonData.player_spawn_y = -1
+            DungeonData.stairs_spawn_x = -1
+            DungeonData.stairs_spawn_y = -1
+            DungeonData.hidden_stairs_spawn_x = -1
+            DungeonData.hidden_stairs_spawn_y = -1
             
             max_nb_room_x = 2 # [r13,#+0x8]
             max_nb_room_y = 2 # [r13,#+0x4]
@@ -2045,6 +2299,9 @@ def generate_floor():
                 if nb_rooms>=2 and room_tiles>=20:
                     break
             gen_attempts += 1
+            if StaticParam.SHOW_ERROR:
+                ReturnData.invalid_generation = True
+                break
         if gen_attempts==10:
             ReturnData.invalid_generation = True
             StatusData.kecleon_shop_middle_x = -1
@@ -2060,22 +2317,9 @@ def generate_floor():
         else:
             empty = False
             
-        generate_spawns1(prop,empty)
-        generate_spawns2(prop,empty)
+        generate_item_spawns(prop,empty)
+        generate_monster_spawns(prop,empty)
         clear_safe()
-
-        ## DEBUG Code
-        for x in range(56):
-            for y in range(32):
-                if DungeonData.list_tiles[x][y][0]&0x3==1:
-                    DungeonData.player_spawn_x = x
-                    DungeonData.player_spawn_y = y
-                    DungeonData.stairs_spawn_x = x
-                    DungeonData.stairs_spawn_y = y
-                    break
-            if DungeonData.list_tiles[x][y][0]&0x3==1:
-                break
-        ## To Be Removed when 
 
         if DungeonData.player_spawn_x!=-1 and DungeonData.player_spawn_y!=-1:
             if get_floor_type()==1:
@@ -2085,6 +2329,9 @@ def generate_floor():
                     if test_reachable(DungeonData.stairs_spawn_x,DungeonData.stairs_spawn_y,False):
                         break
         gen_attempts2 += 1
+        if StaticParam.SHOW_ERROR:
+            ReturnData.invalid_generation = True
+            break
     if gen_attempts2==10:
         ReturnData.invalid_generation = True
         StatusData.kecleon_shop_middle_x = -1
@@ -2093,7 +2340,7 @@ def generate_floor():
         generate_one_mh_room()
         DungeonData.create_mh = 1
         generate_junctions()
-        generate_spawns1(prop,empty)
-        generate_spawns2(prop,empty)
+        generate_item_spawns(prop,0)
+        generate_monster_spawns(prop,0)
         clear_safe()
     # Don't mind the rest of floor generation
