@@ -1,4 +1,4 @@
-from random import randrange
+from RandomGen import *
 
 class Properties: # Floor Properties
     layout = 1
@@ -17,6 +17,7 @@ class Properties: # Floor Properties
     item_density = 0
     buried_item_density = 0
     trap_density = 0
+    fixed_floor_number = 0
 
 class TileData:
     TRANS_TABLE = {0x0: "terrain_flags",
@@ -58,6 +59,7 @@ class StaticParam:
     MH_NORMAL_SPAWN_ITEM = 7 # Originally 7
     MH_MIN_TRAP_DUNGEON = 28 # Originally 28
     PATCH_APPLIED = 0
+    FIX_DEAD_END_ERROR = 0
     FIX_OUTER_ROOM_ERROR = 0
     SHOW_ERROR = 0
     
@@ -89,6 +91,7 @@ class DungeonData: # Dungeon structure
     mh_room = -1 #0x40C9
     hidden_stairs_type = 0 #0x40CC
     fixed_floor_number = 0 #0x40DA
+    attempts = 0 #0x40DE
     mission_flag = 0 #0x760
     mission_type_1 = 0 #0x761
     mission_type_2 = 0 #0x762
@@ -106,8 +109,11 @@ class DungeonData: # Dungeon structure
     guaranteed_item_id = 0 #0x2C9E8
     floor_dungeon_max = 2 #0x2CAF4
     def clear_tiles():
-        DungeonData.list_tiles = [[TileData() for y in range(32)] for z in range(56)]
-
+        DungeonData.list_tiles = [[TileData() for y in range(32)] for x in range(56)] #0x40E0
+    def clear_fixed_room():
+        DungeonData.tiles_fr = [[TileData() for y in range(8)] for x in range(8)] #0xCD60
+    def clear_active_traps():
+        DungeonData.active_traps = [0 for i in range(64)]
 class StatusData: # Status structure 0237CFBC
     second_spawn = 0 #0x0
     has_monster_house = 0 #0x1
@@ -305,8 +311,8 @@ def create_rooms(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, flags):
                         unk_y1 = 1
                     if y==max_nb_room_y-1:
                         unk_y2 = 2
-                    pt_x = randrangeswap(cur_val_x+2+unk_x1, cur_val_x+2+range_x)
-                    pt_y = randrangeswap(cur_val_y+2+unk_y1, cur_val_y+2+range_y)
+                    pt_x = randrangeswap(cur_val_x+2+unk_x1, cur_val_x+2+range_x-unk_x2)
+                    pt_y = randrangeswap(cur_val_y+2+unk_y1, cur_val_y+2+range_y-unk_y2)
                     grid[x][y][0] = pt_x
                     grid[x][y][2] = pt_y
                     grid[x][y][4] = pt_x+1
@@ -317,23 +323,17 @@ def create_rooms(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, flags):
                 else:
                     size_x = randrangeswap(5,range_x)
                     size_y = randrangeswap(4,range_y)
-                    if size_x | 1 < max_nb_room_x:
+                    if size_x | 1 < range_x:
                         size_x |= 1
-                    if size_y | 1 < max_nb_room_y:
+                    if size_y | 1 < range_y:
                         size_y |= 1
                     if size_x>size_y*3//2:
                         size_x = size_y*3//2
                     if size_y>size_x*3//2:
                         size_y = size_x*3//2
-                    if range_x-size_x>0:
-                        start_x = randrange(range_x-size_x)+cur_val_x+2
-                    else:
-                        start_x = cur_val_x+2
+                    start_x = randrangeswap(0,range_x-size_x)+cur_val_x+2
                     end_x = start_x+size_x
-                    if range_y-size_y>0:
-                        start_y = randrange(range_y-size_y)+cur_val_y+2
-                    else:
-                        start_y = cur_val_y+2
+                    start_y = randrangeswap(0,range_y-size_y)+cur_val_y+2
                     end_y = start_y+size_y
                     grid[x][y][0] = start_x
                     grid[x][y][2] = start_y
@@ -426,26 +426,48 @@ def create_connections(grid, max_nb_room_x, max_nb_room_y, pt_x, pt_y, prop):
                             rnd_num &= 3
                             ### WARNING! Not consistent with the original code!
                             ### That part is bugged in the actual version
-                            if rnd_num==0 and grid[x+1][y][8]==0:
-                                grid[x][y][0x16] = 1
-                                grid[x+1][y][0x15] = 1
-                                more = True
-                                x += 1
-                            elif rnd_num==1 and grid[x][y-1][8]==0:
-                                grid[x][y][0x13] = 1
-                                grid[x][y-1][0x14] = 1
-                                more = True
-                                y -= 1
-                            elif rnd_num==2 and grid[x-1][y][8]==0:
-                                grid[x][y][0x15] = 1
-                                grid[x-1][y][0x16] = 1
-                                more = True
-                                x -= 1
-                            elif rnd_num==3 and grid[x][y+1][8]==0:
-                                grid[x][y][0x14] = 1
-                                grid[x][y+1][0x13] = 1
-                                more = True
-                                y += 1
+                            if StatusData.FIX_DEAD_END_ERROR:
+                                if rnd_num==0 and grid[x+1][y][8]==0:
+                                    grid[x][y][0x16] = 1
+                                    grid[x+1][y][0x15] = 1
+                                    more = True
+                                    x += 1
+                                elif rnd_num==1 and grid[x][y-1][8]==0:
+                                    grid[x][y][0x13] = 1
+                                    grid[x][y-1][0x14] = 1
+                                    more = True
+                                    y -= 1
+                                elif rnd_num==2 and grid[x-1][y][8]==0:
+                                    grid[x][y][0x15] = 1
+                                    grid[x-1][y][0x16] = 1
+                                    more = True
+                                    x -= 1
+                                elif rnd_num==3 and grid[x][y+1][8]==0:
+                                    grid[x][y][0x14] = 1
+                                    grid[x][y+1][0x13] = 1
+                                    more = True
+                                    y += 1
+                            else:
+                                if rnd_num==0 and grid[x+1][y][8]==0:
+                                    grid[x][y][0x16] = 1
+                                    grid[x+1][y][0x15] = 1
+                                    more = True
+                                    x += 1
+                                elif rnd_num==1 and grid[x+1][y][8]==0:
+                                    grid[x][y][0x13] = 1
+                                    grid[x][y-1][0x14] = 1
+                                    more = True
+                                    y -= 1
+                                elif rnd_num==2 and grid[x+1][y][8]==0:
+                                    grid[x][y][0x15] = 1
+                                    grid[x-1][y][0x16] = 1
+                                    more = True
+                                    x -= 1
+                                elif rnd_num==3 and grid[x+1][y][8]==0:
+                                    grid[x][y][0x14] = 1
+                                    grid[x][y+1][0x13] = 1
+                                    more = True
+                                    y += 1
 
 #US: 0233F120
 def process_hallway(pt_x, pt_y, pt2_x, pt2_y, vertical, list_val_x, list_val_y):
@@ -564,8 +586,8 @@ def create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, no_merge
                     grid[x][y][0x14] = 0
                 for v in range(0x13,0x17):
                     grid[x][y][v+4] = grid[x][y][v]
-    for y in range(max_nb_room_y):
-        for x in range(max_nb_room_x):
+    for x in range(max_nb_room_x):
+        for y in range(max_nb_room_y):
             if grid[x][y][8]==0:
                 if grid[x][y][10]==0:
                     pt_x = grid[x][y][0]
@@ -590,7 +612,7 @@ def create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, no_merge
                             pt2_x = grid[x][y+1][0]
                         else:
                             pt2_x = randrange(grid[x][y+1][0]+1, grid[x][y+1][4]-1)
-                        process_hallway(pt_x, grid[x][y][6]-1, pt2_x, grid[x][y+1][2], 1, list_x[x], list_y[y+1])
+                        process_hallway(pt_x, grid[x][y][6]-1, pt2_x, grid[x][y+1][2], 1, list_x[x], list_y[y+1]-1)
                     grid[x][y][0x18] = 0
                     grid[x][y+1][0x17] = 0
                     grid[x][y][0xb] = 1
@@ -613,15 +635,16 @@ def create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, no_merge
                             pt2_y = grid[x+1][y][2]
                         else:
                             pt2_y = randrange(grid[x+1][y][2]+1, grid[x+1][y][6]-1)
-                        process_hallway(grid[x][y][4]-1, pt_y, grid[x+1][y][0], pt2_y, 0, list_x[x+1], list_y[y])
+                        process_hallway(grid[x][y][4]-1, pt_y, grid[x+1][y][0], pt2_y, 0, list_x[x+1]-1, list_y[y])
                     grid[x][y][0x1a] = 0
                     grid[x+1][y][0x19] = 0
                     grid[x][y][0xb] = 1
                     grid[x+1][y][0xb] = 1
     if no_merge_rooms==0:
-        for y in range(max_nb_room_y):
-            for x in range(max_nb_room_x):
-                if randrange(100)<StaticParam.MERGE_CHANCE and grid[x][y][8]==0 and grid[x][y][0xb]!=0 \
+        for x in range(max_nb_room_x):
+            for y in range(max_nb_room_y):
+                chance = randrange(100)
+                if chance<StaticParam.MERGE_CHANCE and grid[x][y][8]==0 and grid[x][y][0xb]!=0 \
                    and grid[x][y][0x12]==0 and grid[x][y][0x9]==0 and grid[x][y][10]!=0:
                     rnd_num = randrange(4)
                     if rnd_num==0 and x>=1 and grid[x-1][y][8]==0 and grid[x-1][y][0xb]!=0 \
@@ -707,12 +730,12 @@ def create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, no_merge
 
 #US: 0233F424
 def add_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y):
-    for y in range(max_nb_room_y):
-        for x in range(max_nb_room_x):
+    for x in range(max_nb_room_x):
+        for y in range(max_nb_room_y):
             if grid[x][y][8]==0 and grid[x][y][0xb]==0 and grid[x][y][0x11]==0:
                 if grid[x][y][10]!=0 and grid[x][y][9]==0:
-                    rnd_x = randrange(grid[x][y][0]-1, grid[x][y][4]-1)
-                    rnd_y = randrange(grid[x][y][2]-1, grid[x][y][6]-1)
+                    rnd_x = randrange(grid[x][y][0]+1, grid[x][y][4]-1)
+                    rnd_y = randrange(grid[x][y][2]+1, grid[x][y][6]-1)
                     if y>0 and grid[x][y-1][8]==0 and grid[x][y-1][0x12]==0 and grid[x][y-1][0xb]!=0:
                         if grid[x][y-1][10]==0:
                             pt_x = grid[x][y-1][0]
@@ -729,7 +752,7 @@ def add_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y):
                         else:
                             pt_x = randrange(grid[x][y+1][0]+1,grid[x][y+1][4]-1)
                             pt_y = randrange(grid[x][y+1][2]+1,grid[x][y+1][6]-1)
-                        process_hallway(rnd_x, grid[x][y][6]-1, pt_x, grid[x][y+1][2], 1, list_x[x], list_y[y+1])
+                        process_hallway(rnd_x, grid[x][y][6]-1, pt_x, grid[x][y+1][2], 1, list_x[x], list_y[y+1]-1)
                         grid[x][y][0xb] = 1
                         grid[x][y][0x14] = 1
                         grid[x][y+1][0x13] = 1
@@ -844,31 +867,33 @@ def create_maze(grid_cell, secondary):
 
 #US: 02340224
 def mazify(grid, max_nb_room_x, max_nb_room_y, maze_chance):
-    if maze_chance>0 and randrange(100)<maze_chance and (StaticParam.PATCH_APPLIED or DungeonData.maze_value<0):
-        nb_valid = 0
-        for y in range(max_nb_room_y):
-            for x in range(max_nb_room_x):
-                if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xb]!=0 and grid[x][y][10]!=0 and \
-                   grid[x][y][9]==0 and grid[x][y][0xc]==0 and grid[x][y][0xe]==0 and grid[x][y][0xf]==0:
-                    if (grid[x][y][4]-grid[x][y][0])&1 and (grid[x][y][6]-grid[x][y][2])&1:
-                        nb_valid += 1
-        if nb_valid>0:
-            values = [i==0 for i in range(100)]
-            for x in range(0x40):
-                a = randrange(nb_valid)
-                b = randrange(nb_valid)
-                tmp = values[a]
-                values[a] = values[b]
-                values[b] = tmp
-            counter = 0
-            for y in range(max_nb_room_y):
-                for x in range(max_nb_room_x):
-                    if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xb]!=0 and grid[x][y][10]!=0 and \
-                       grid[x][y][9]==0 and grid[x][y][0xc]==0 and grid[x][y][0xe]==0 and grid[x][y][0xf]==0:
-                        if (grid[x][y][4]-grid[x][y][0])&1 and (grid[x][y][6]-grid[x][y][2])&1:
-                            if values[counter]:
-                                create_maze(grid[x][y], 0)
-                            counter += 1
+    if maze_chance>0:
+        if randrange(100)<maze_chance:
+            if StaticParam.PATCH_APPLIED or DungeonData.maze_value<0:
+                nb_valid = 0
+                for y in range(max_nb_room_y):
+                    for x in range(max_nb_room_x):
+                        if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xb]!=0 and grid[x][y][10]!=0 and \
+                           grid[x][y][9]==0 and grid[x][y][0xc]==0 and grid[x][y][0xe]==0 and grid[x][y][0xf]==0:
+                            if (grid[x][y][4]-grid[x][y][0])&1 and (grid[x][y][6]-grid[x][y][2])&1:
+                                nb_valid += 1
+                if nb_valid>0:
+                    values = [i==0 for i in range(100)]
+                    for x in range(0x40):
+                        a = randrange(nb_valid)
+                        b = randrange(nb_valid)
+                        tmp = values[a]
+                        values[a] = values[b]
+                        values[b] = tmp
+                    counter = 0
+                    for y in range(max_nb_room_y):
+                        for x in range(max_nb_room_x):
+                            if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xb]!=0 and grid[x][y][10]!=0 and \
+                               grid[x][y][9]==0 and grid[x][y][0xc]==0 and grid[x][y][0xe]==0 and grid[x][y][0xf]==0:
+                                if (grid[x][y][4]-grid[x][y][0])&1 and (grid[x][y][6]-grid[x][y][2])&1:
+                                    if values[counter]:
+                                        create_maze(grid[x][y], 0)
+                                    counter += 1
 
 #US: 022E03B0
 def get_floor_type():
@@ -880,59 +905,60 @@ def get_floor_type():
 
 #US: 0233FBE8
 def generate_kecleon_shop(grid, max_nb_room_x, max_nb_room_y, kecleon_chance):
-    if StatusData.has_monster_house==0 and get_floor_type()!=2 and kecleon_chance!=0 and randrange(100)<kecleon_chance:
-        list_x = [i for i in range(0xF)]
-        list_y = [i for i in range(0xF)]
-        for x in range(200):
-            a = randrange(0xF)
-            b = randrange(0xF)
-            tmp = list_x[a]
-            list_x[a] = list_x[b]
-            list_x[b] = tmp
-        for x in range(200):
-            a = randrange(0xF)
-            b = randrange(0xF)
-            tmp = list_y[a]
-            list_y[a] = list_y[b]
-            list_y[b] = tmp
-        for i in range(0xF):
-            if list_x[i]<max_nb_room_x:
-                x = list_x[i]
-                for j in range(0xF):
-                    if list_y[j]<max_nb_room_y:
-                        y = list_y[j]
-                        if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0x12]==0 and \
-                           grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0x10]==0 and grid[x][y][0x1D]==0:
-                            if abs(grid[x][y][0]-grid[x][y][4])>=5 and abs(grid[x][y][2]-grid[x][y][6])>=4:
-                                StatusData.has_kecleon_shop = 1
-                                StatusData.kecleon_shop_min_x = grid[x][y][0]
-                                StatusData.kecleon_shop_min_y = grid[x][y][2]
-                                StatusData.kecleon_shop_max_x = grid[x][y][4]
-                                StatusData.kecleon_shop_max_y = grid[x][y][6]
-                                if grid[x][y][6]-grid[x][y][2]<3:
-                                    StatusData.kecleon_shop_max_y = grid[x][y][6] + 1
-                                DungeonData.kecleon_shop_min_x = 9999
-                                DungeonData.kecleon_shop_min_y = 9999
-                                DungeonData.kecleon_shop_max_x = -9999
-                                DungeonData.kecleon_shop_max_y = -9999
-                                for cur_x in range(StatusData.kecleon_shop_min_x, StatusData.kecleon_shop_max_x):
-                                    for cur_y in range(StatusData.kecleon_shop_min_y, StatusData.kecleon_shop_max_y):
-                                        DungeonData.list_tiles[cur_x][cur_y][0] |= 0x20
-                                        DungeonData.list_tiles[cur_x][cur_y][2] &= 0x9
-                                        if cur_x<=DungeonData.kecleon_shop_min_x:
-                                            DungeonData.kecleon_shop_min_x = cur_x
-                                        if cur_y<=DungeonData.kecleon_shop_min_y:
-                                            DungeonData.kecleon_shop_min_y = cur_y
-                                        if cur_x>=DungeonData.kecleon_shop_max_x:
-                                            DungeonData.kecleon_shop_max_x = cur_x
-                                        if cur_y>=DungeonData.kecleon_shop_max_y:
-                                            DungeonData.kecleon_shop_max_y = cur_y
-                                for cur_x in range(grid[x][y][0], grid[x][y][4]):
-                                    for cur_y in range(grid[x][y][2], grid[x][y][6]):
-                                        DungeonData.list_tiles[cur_x][cur_y][2] |= 0x10
-                                StatusData.kecleon_shop_middle_x = (StatusData.kecleon_shop_min_x+StatusData.kecleon_shop_max_x)//2
-                                StatusData.kecleon_shop_middle_y = (StatusData.kecleon_shop_min_y+StatusData.kecleon_shop_max_y)//2
-                                return
+    if StatusData.has_monster_house==0 and get_floor_type()!=2 and kecleon_chance!=0:
+        if randrange(100)<kecleon_chance:
+            list_x = [i for i in range(0xF)]
+            list_y = [i for i in range(0xF)]
+            for x in range(200):
+                a = randrange(0xF)
+                b = randrange(0xF)
+                tmp = list_x[a]
+                list_x[a] = list_x[b]
+                list_x[b] = tmp
+            for x in range(200):
+                a = randrange(0xF)
+                b = randrange(0xF)
+                tmp = list_y[a]
+                list_y[a] = list_y[b]
+                list_y[b] = tmp
+            for i in range(0xF):
+                if list_x[i]<max_nb_room_x:
+                    x = list_x[i]
+                    for j in range(0xF):
+                        if list_y[j]<max_nb_room_y:
+                            y = list_y[j]
+                            if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0x12]==0 and \
+                               grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0x10]==0 and grid[x][y][0x1D]==0:
+                                if abs(grid[x][y][0]-grid[x][y][4])>=5 and abs(grid[x][y][2]-grid[x][y][6])>=4:
+                                    StatusData.has_kecleon_shop = 1
+                                    StatusData.kecleon_shop_min_x = grid[x][y][0]
+                                    StatusData.kecleon_shop_min_y = grid[x][y][2]
+                                    StatusData.kecleon_shop_max_x = grid[x][y][4]
+                                    StatusData.kecleon_shop_max_y = grid[x][y][6]
+                                    if grid[x][y][6]-grid[x][y][2]<3:
+                                        StatusData.kecleon_shop_max_y = grid[x][y][6] + 1
+                                    DungeonData.kecleon_shop_min_x = 9999
+                                    DungeonData.kecleon_shop_min_y = 9999
+                                    DungeonData.kecleon_shop_max_x = -9999
+                                    DungeonData.kecleon_shop_max_y = -9999
+                                    for cur_x in range(StatusData.kecleon_shop_min_x, StatusData.kecleon_shop_max_x):
+                                        for cur_y in range(StatusData.kecleon_shop_min_y, StatusData.kecleon_shop_max_y):
+                                            DungeonData.list_tiles[cur_x][cur_y][0] |= 0x20
+                                            DungeonData.list_tiles[cur_x][cur_y][2] &= 0x9
+                                            if cur_x<=DungeonData.kecleon_shop_min_x:
+                                                DungeonData.kecleon_shop_min_x = cur_x
+                                            if cur_y<=DungeonData.kecleon_shop_min_y:
+                                                DungeonData.kecleon_shop_min_y = cur_y
+                                            if cur_x>=DungeonData.kecleon_shop_max_x:
+                                                DungeonData.kecleon_shop_max_x = cur_x
+                                            if cur_y>=DungeonData.kecleon_shop_max_y:
+                                                DungeonData.kecleon_shop_max_y = cur_y
+                                    for cur_x in range(grid[x][y][0], grid[x][y][4]):
+                                        for cur_y in range(grid[x][y][2], grid[x][y][6]):
+                                            DungeonData.list_tiles[cur_x][cur_y][2] |= 0x10
+                                    StatusData.kecleon_shop_middle_x = (StatusData.kecleon_shop_min_x+StatusData.kecleon_shop_max_x)//2
+                                    StatusData.kecleon_shop_middle_y = (StatusData.kecleon_shop_min_y+StatusData.kecleon_shop_max_y)//2
+                                    return
 
 #US: 02349250
 def is_current_mission_type(a,b):
@@ -949,36 +975,37 @@ def is_current_mission_special_type():
 
 #US: 0233FF9C
 def generate_monster_house(grid, max_nb_room_x, max_nb_room_y, mh_chance):
-    if StatusData.has_kecleon_shop==0 and mh_chance!=0 and randrange(100)<mh_chance:
-        if (is_current_mission_type(10,7) or not is_current_mission_special_type()) and get_floor_type()==0:
-            nb_valid = 0
-            for x in range(max_nb_room_x):
-                for y in range(max_nb_room_y):
-                    if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xc]==0 and \
-                       grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0xf]==0 and grid[x][y][0x10]==0:
-                        nb_valid += 1
-            if nb_valid>0:
-                values = [i==0 for i in range(0x100)]
-                for x in range(0x40):
-                    a = randrange(nb_valid)
-                    b = randrange(nb_valid)
-                    tmp = values[a]
-                    values[a] = values[b]
-                    values[b] = tmp
-                counter = 0
+    if randrange(100)<mh_chance:
+        if StatusData.has_kecleon_shop==0 and mh_chance!=0:
+            if (is_current_mission_type(10,7) or not is_current_mission_special_type()) and get_floor_type()==0:
+                nb_valid = 0
                 for x in range(max_nb_room_x):
                     for y in range(max_nb_room_y):
                         if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xc]==0 and \
                            grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0xf]==0 and grid[x][y][0x10]==0:
-                            if values[counter]:
-                                StatusData.has_monster_house = 1
-                                grid[x][y][0xe] = 1
-                                for cur_x in range(grid[x][y][0], grid[x][y][4]):
-                                    for cur_y in range(grid[x][y][2], grid[x][y][6]):
-                                        DungeonData.list_tiles[cur_x][cur_y][0] |= 0x40
-                                        DungeonData.mh_room = DungeonData.list_tiles[cur_x][cur_y][7]
-                                return
-                            counter += 1
+                            nb_valid += 1
+                if nb_valid>0:
+                    values = [i==0 for i in range(0x100)]
+                    for x in range(0x40):
+                        a = randrange(nb_valid)
+                        b = randrange(nb_valid)
+                        tmp = values[a]
+                        values[a] = values[b]
+                        values[b] = tmp
+                    counter = 0
+                    for x in range(max_nb_room_x):
+                        for y in range(max_nb_room_y):
+                            if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xc]==0 and \
+                               grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0xf]==0 and grid[x][y][0x10]==0:
+                                if values[counter]:
+                                    StatusData.has_monster_house = 1
+                                    grid[x][y][0xe] = 1
+                                    for cur_x in range(grid[x][y][0], grid[x][y][4]):
+                                        for cur_y in range(grid[x][y][2], grid[x][y][6]):
+                                            DungeonData.list_tiles[cur_x][cur_y][0] |= 0x40
+                                            DungeonData.mh_room = DungeonData.list_tiles[cur_x][cur_y][7]
+                                    return
+                                counter += 1
 
 #US: 0233C9E8
 def generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, extra_hallways):
@@ -990,13 +1017,13 @@ def generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, extra_hallways):
             cur_y = randrange(grid[x][y][2], grid[x][y][6])
             rnd_val = randrange(4)*2
             for j in range(3):
-                if rnd_val==0 and x>=max_nb_room_x-1:
+                if rnd_val==0 and y>=max_nb_room_y-1:
                     rnd_val = 2
-                elif rnd_val==2 and y>=max_nb_room_y-1:
+                if rnd_val==2 and x>=max_nb_room_x-1:
                     rnd_val = 4
-                elif rnd_val==4 and x<=0:
+                if rnd_val==4 and y<=0:
                     rnd_val = 6
-                elif rnd_val==6 and y<=0:
+                if rnd_val==6 and x<=0:
                     rnd_val = 0
             room = DungeonData.list_tiles[cur_x][cur_y][7]
             ok = True
@@ -1075,15 +1102,16 @@ def generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, extra_hallways):
                                     break
                                 rnd -= 1
                                 if rnd==0:
-                                    rnd += randrange(3)+3
-                                    if randrange(100)<50:
+                                    rnd = randrange(3)+3
+                                    sel = randrange(100)
+                                    if sel<50:
                                         rnd_val += 2
                                     else:
                                         rnd_val -= 2
                                     rnd_val &= 6
-                                    if cur_x>=32 and StatusData.floor_size>0 and rnd_val==0x2:
+                                    if cur_x>=32 and StatusData.floor_size==1 and rnd_val==0x2:
                                         break
-                                    if cur_x>=48 and StatusData.floor_size==1 and rnd_val==0x2:
+                                    if cur_x>=48 and StatusData.floor_size==2 and rnd_val==0x2:
                                         break
                                 cur_x+=StaticParam.LIST_DIRECTIONS[rnd_val*4]
                                 cur_y+=StaticParam.LIST_DIRECTIONS[rnd_val*4+2]
@@ -1094,7 +1122,7 @@ def generate_room_imperfections(grid, max_nb_room_x, max_nb_room_y):
         for y in range(max_nb_room_y):
             if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0x12]==0 and \
                grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0x10]==0 and grid[x][y][0x1C]!=0:
-                if randrange(100)<StaticParam.IMPERFECT_CHANCE:
+                if randrange(100)>=StaticParam.IMPERFECT_CHANCE:
                     length = (grid[x][y][4]-grid[x][y][0])+(grid[x][y][6]-grid[x][y][2])
                     length = max(length//4, 1)
                     for counter in range(length):
@@ -1119,7 +1147,7 @@ def generate_room_imperfections(grid, max_nb_room_x, max_nb_room_y):
                                     move_y = 1
                                     move_x = 0
                             elif rnd_val==2:
-                                pt_x = grid[x][y][0]-1
+                                pt_x = grid[x][y][4]-1
                                 pt_y = grid[x][y][6]-1
                                 if i==0:
                                     move_y = -1
@@ -1195,7 +1223,7 @@ def test_room(cur_x, cur_y):
                 continue
             if cur_y+dy>=32:
                 break
-            if dx==0 and dy==0:
+            if dx!=0 and dy!=0:
                 continue
             if DungeonData.list_tiles[cur_x+dx][cur_y+dy][0]&3==1 and \
                DungeonData.list_tiles[cur_x+dx][cur_y+dy][7]==0xFF:
@@ -1204,8 +1232,8 @@ def test_room(cur_x, cur_y):
 
 #US: 0233D674
 def generate_room_middle_secondary(grid, max_nb_room_x, max_nb_room_y):
-    for x in range(max_nb_room_x):
-        for y in range(max_nb_room_y):
+    for y in range(max_nb_room_y):
+        for x in range(max_nb_room_x):
             if grid[x][y][8]==0 and grid[x][y][0xe]==0 and grid[x][y][0x12]==0 and \
                grid[x][y][10]!=0 and grid[x][y][0x1D]!=0 and grid[x][y][0x1C]==0:
                 rnd_val = randrange(6)
@@ -1260,8 +1288,8 @@ def generate_room_middle_secondary(grid, max_nb_room_x, max_nb_room_y):
                                 tmp=rnd_y1
                                 rnd_y1=rnd_y2
                                 rnd_y2=tmp
-                            for cur_x in range(rnd_x1,rnd_x2):
-                                for cur_y in range(rnd_y1,rnd_y2):
+                            for cur_x in range(rnd_x1,rnd_x2+1):
+                                for cur_y in range(rnd_y1,rnd_y2+1):
                                     DungeonData.list_tiles[cur_x][cur_y][0] &= ~0x3
                                     DungeonData.list_tiles[cur_x][cur_y][0] |= 0x2
                             grid[x][y][9] = 1
@@ -1319,18 +1347,41 @@ def generate_normal_floor(max_nb_room_x, max_nb_room_y, prop):
     list_x, list_y = generate_grid_positions(max_nb_room_x, max_nb_room_y)
     grid = init_grid(max_nb_room_x, max_nb_room_y)
     place_rooms(grid, max_nb_room_x, max_nb_room_y, prop.nb_rooms)
+    #RandomGenerator.print()
     create_rooms(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, prop.bit_flags)
+    #RandomGenerator.print()
     rnd_x = randrange(max_nb_room_x)
     rnd_y = randrange(max_nb_room_y)
     create_connections(grid, max_nb_room_x, max_nb_room_y, rnd_x, rnd_y, prop)
+    #RandomGenerator.print()
     create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, 0)
+    #RandomGenerator.print()
+    """
+    print("-----------------------------")
+    print("%08X" % max_nb_room_x)
+    print("%08X" % max_nb_room_y)
+    print("-----------------------------")
+    for x in range(15):
+        for y in range(15):
+            c = grid[x][y]
+            print("%04X" % c[0])
+            print("%04X" % c[2])
+            print("%04X" % c[4])
+            print("%04X" % c[6])
+            print("-----------------------------")
+    """
     add_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y)
+    #RandomGenerator.print()
     mazify(grid, max_nb_room_x, max_nb_room_y, prop.maze_chance)
     generate_kecleon_shop(grid, max_nb_room_x, max_nb_room_y, StatusData.kecleon_chance)
     generate_monster_house(grid, max_nb_room_x, max_nb_room_y, StatusData.mh_chance)
+    #RandomGenerator.print()
     generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, prop.extra_hallways)
+    #RandomGenerator.print()
     generate_room_imperfections(grid, max_nb_room_x, max_nb_room_y)
+    #RandomGenerator.print()
     generate_room_middle_secondary(grid, max_nb_room_x, max_nb_room_y)
+    #RandomGenerator.print()
 
 #US: 02342B7C
 def reset_y_borders():
@@ -1934,10 +1985,10 @@ def generate_item_spawns(prop, empty):
             if not StatusData.hidden_stairs_type:
                 del valid_spawns[stairs]
                 if DungeonData.floor_dungeon_number<DungeonData.floor_dungeon_max:
-                    #US: Call to 022EAC4C(3)
+                    use_gen_1(3)
                     stairs = randrange(len(valid_spawns))
                     generate_stairs(valid_spawns[stairs], StatusData.hidden_stairs_type)
-                    #US: Call to 022EAC64()
+                    use_gen_0()
     valid_spawns = []
     for x in range(56):
         for y in range(32):
@@ -2193,30 +2244,67 @@ def test_reachable(xpos,ypos,mark_invalid):
                     if DungeonData.list_tiles[x][y][0]&0x100==0:
                         return False
     return True
-    
+
+def reinit_tiles():
+    DungeonData.clear_tiles()
+    for x in range(56):
+        for y in range(32):
+            if is_out_of_bounds(x-1,y) or is_out_of_bounds(x,y-1) \
+                or is_out_of_bounds(x+1,y) or is_out_of_bounds(x,y+1) \
+                or is_out_of_bounds(x-1,y-1) or is_out_of_bounds(x-1,y+1) \
+                or is_out_of_bounds(x+1,y-1) or is_out_of_bounds(x+1,y+1):
+                DungeonData.list_tiles[x][y][0] |= 0x10
+    DungeonData.stairs_spawn_x = -1
+    DungeonData.stairs_spawn_y = -1
+    DungeonData.clear_fixed_room()
+    DungeonData.nb_active_items = 0
+    DungeonData.clear_active_traps()
+
+def process_fixed_room(fixed_floor_number, prop):
+    return True # TODO
 
 def generate_floor():
     StatusData.floor_size = 0
     prop = Properties
+    DungeonData.fixed_floor_number = Properties.fixed_floor_number
     StatusData.mh_chance = Properties.mh_chance
     StatusData.kecleon_chance = Properties.kecleon_chance
     StatusData.middle_room_secondary = Properties.middle_room_secondary
-    StatusData.middle_room_secondary = Properties.middle_room_secondary
     gen_attempts2 = 0
     while gen_attempts2<10:
+        DungeonData.player_spawn_x = -1
+        DungeonData.player_spawn_y = -1
+        DungeonData.stairs_spawn_x = -1
+        DungeonData.stairs_spawn_y = -1
+        DungeonData.hidden_stairs_spawn_x = -1
+        DungeonData.hidden_stairs_spawn_y = -1
+        
         gen_attempts = 0
+
+        fixed_room = 0
         while gen_attempts<10:
             ReturnData.invalid_generation = False
-            DungeonData.clear_tiles()
+            if fixed_room==0:
+                if 0<DungeonData.fixed_floor_number<0xA5:
+                    break
+                fixed_room = 0
+            DungeonData.attempts = gen_attempts
+
+            if gen_attempts>=1:
+                StatusData.middle_room_secondary = 0
+            
             StatusData.is_not_valid = 0
             StatusData.kecleon_shop_middle_x = -1
             StatusData.kecleon_shop_middle_y = -1
+
+            reinit_tiles()
+
             DungeonData.player_spawn_x = -1
             DungeonData.player_spawn_y = -1
-            DungeonData.stairs_spawn_x = -1
-            DungeonData.stairs_spawn_y = -1
-            DungeonData.hidden_stairs_spawn_x = -1
-            DungeonData.hidden_stairs_spawn_y = -1
+
+            if DungeonData.fixed_floor_number!=0:
+                if not process_fixed_room(DungeonData.fixed_floor_number, prop):
+                    fixed_room = 1
             
             max_nb_room_x = 2 # [r13,#+0x8]
             max_nb_room_y = 2 # [r13,#+0x4]
