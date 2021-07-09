@@ -18,6 +18,7 @@ class Properties: # Floor Properties
     buried_item_density = 0
     trap_density = 0
     fixed_floor_number = 0
+    hidden_stairs_type = 0
 
 class TileData:
     TRANS_TABLE = {0x0: "terrain_flags",
@@ -107,7 +108,7 @@ class DungeonData: # Dungeon structure
     kecleon_shop_max_y = 0 #0xCD20
     nb_items = 0 #0x12AFA
     guaranteed_item_id = 0 #0x2C9E8
-    floor_dungeon_max = 2 #0x2CAF4
+    floor_dungeon_max = 4 #0x2CAF4
     def clear_tiles():
         DungeonData.list_tiles = [[TileData() for y in range(32)] for x in range(56)] #0x40E0
     def clear_fixed_room():
@@ -200,13 +201,6 @@ class GridCell:
         return getattr(self, GridCell.TRANS_TABLE[index])
     def __setitem__(self, index, value):
         setattr(self, GridCell.TRANS_TABLE[index], value)
-
-def randrangeswap(a,b):
-    if a==b:
-        return a
-    if a>b:
-        return randrange(b,a)
-    return randrange(a,b)
 
 #US: 0233CF84
 def generate_grid_positions(max_nb_room_x, max_nb_room_y):
@@ -331,9 +325,9 @@ def create_rooms(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, flags):
                         size_x = size_y*3//2
                     if size_y>size_x*3//2:
                         size_y = size_x*3//2
-                    start_x = randrangeswap(0,range_x-size_x)+cur_val_x+2
+                    start_x = randrangeforce(range_x-size_x)+cur_val_x+2
                     end_x = start_x+size_x
-                    start_y = randrangeswap(0,range_y-size_y)+cur_val_y+2
+                    start_y = randrangeforce(range_y-size_y)+cur_val_y+2
                     end_y = start_y+size_y
                     grid[x][y][0] = start_x
                     grid[x][y][2] = start_y
@@ -975,37 +969,38 @@ def is_current_mission_special_type():
 
 #US: 0233FF9C
 def generate_monster_house(grid, max_nb_room_x, max_nb_room_y, mh_chance):
-    if randrange(100)<mh_chance:
-        if StatusData.has_kecleon_shop==0 and mh_chance!=0:
-            if (is_current_mission_type(10,7) or not is_current_mission_special_type()) and get_floor_type()==0:
-                nb_valid = 0
-                for x in range(max_nb_room_x):
-                    for y in range(max_nb_room_y):
-                        if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xc]==0 and \
-                           grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0xf]==0 and grid[x][y][0x10]==0:
-                            nb_valid += 1
-                if nb_valid>0:
-                    values = [i==0 for i in range(0x100)]
-                    for x in range(0x40):
-                        a = randrange(nb_valid)
-                        b = randrange(nb_valid)
-                        tmp = values[a]
-                        values[a] = values[b]
-                        values[b] = tmp
-                    counter = 0
+    if mh_chance!=0:
+        if randrange(100)<mh_chance:
+            if StatusData.has_kecleon_shop==0:
+                if (is_current_mission_type(10,7) or not is_current_mission_special_type()) and get_floor_type()==0:
+                    nb_valid = 0
                     for x in range(max_nb_room_x):
                         for y in range(max_nb_room_y):
                             if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xc]==0 and \
                                grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0xf]==0 and grid[x][y][0x10]==0:
-                                if values[counter]:
-                                    StatusData.has_monster_house = 1
-                                    grid[x][y][0xe] = 1
-                                    for cur_x in range(grid[x][y][0], grid[x][y][4]):
-                                        for cur_y in range(grid[x][y][2], grid[x][y][6]):
-                                            DungeonData.list_tiles[cur_x][cur_y][0] |= 0x40
-                                            DungeonData.mh_room = DungeonData.list_tiles[cur_x][cur_y][7]
-                                    return
-                                counter += 1
+                                nb_valid += 1
+                    if nb_valid>0:
+                        values = [i==0 for i in range(0x100)]
+                        for x in range(0x40):
+                            a = randrange(nb_valid)
+                            b = randrange(nb_valid)
+                            tmp = values[a]
+                            values[a] = values[b]
+                            values[b] = tmp
+                        counter = 0
+                        for x in range(max_nb_room_x):
+                            for y in range(max_nb_room_y):
+                                if grid[x][y][8]==0 and grid[x][y][0x11]==0 and grid[x][y][0xc]==0 and \
+                                   grid[x][y][10]!=0 and grid[x][y][0xb]!=0 and grid[x][y][9]==0 and grid[x][y][0xf]==0 and grid[x][y][0x10]==0:
+                                    if values[counter]:
+                                        StatusData.has_monster_house = 1
+                                        grid[x][y][0xe] = 1
+                                        for cur_x in range(grid[x][y][0], grid[x][y][4]):
+                                            for cur_y in range(grid[x][y][2], grid[x][y][6]):
+                                                DungeonData.list_tiles[cur_x][cur_y][0] |= 0x40
+                                                DungeonData.mh_room = DungeonData.list_tiles[cur_x][cur_y][7]
+                                        return
+                                    counter += 1
 
 #US: 0233C9E8
 def generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, extra_hallways):
@@ -1469,37 +1464,38 @@ def generate_secondary(test_attrib, prop):
                             store_secondary_check(DungeonData.list_tiles[pt_x][pt_y])
                     pt_x += dir_x
                     pt_y += dir_y
-                    if 0<=pt_y<56:
-                        rnd_val -= 1
-                        if rnd_val>0:
-                            for j in range(0x40):
-                                off_x = randrange(7)-3
-                                off_y = randrange(7)-3
+                    if pt_y<0 or pt_y>=32:
+                        break
+                    rnd_val -= 1
+                    if rnd_val==0:
+                        for j in range(0x40):
+                            off_x = randrange(7)-3
+                            off_y = randrange(7)-3
+                            if 2<=pt_x+off_x<54 and 2<=pt_y+off_y<30:
+                                second_near = False
+                                for x in range(-1,2):
+                                    for y in range(-1,2):
+                                        if x!=0 or y!=0:
+                                            if DungeonData.list_tiles[pt_x+off_x+x][pt_y+off_y+y][0]&3==2:
+                                                second_near = True
+                                                break
+                                    if second_near:
+                                        break
+                                if second_near:
+                                    if not is_out_of_bounds(pt_x+off_x, pt_y+off_y):
+                                        store_secondary_check(DungeonData.list_tiles[pt_x+off_x][pt_y+off_y])
+                        for off_x in range(-3,4):
+                            for off_y in range(-3,4):
+                                counter = 0
                                 if 2<=pt_x+off_x<54 and 2<=pt_y+off_y<30:
-                                    second_near = False
                                     for x in range(-1,2):
                                         for y in range(-1,2):
-                                            if x!=0 and y!=0:
+                                            if x!=0 or y!=0:
                                                 if DungeonData.list_tiles[pt_x+off_x+x][pt_y+off_y+y][0]&3==2:
-                                                    second_near = True
-                                                    break
-                                        if second_near:
-                                            break
-                                    if second_near:
+                                                    counter += 1
+                                    if counter>=4:
                                         if not is_out_of_bounds(pt_x+off_x, pt_y+off_y):
                                             store_secondary_check(DungeonData.list_tiles[pt_x+off_x][pt_y+off_y])
-                            for off_x in range(-3,4):
-                                for off_y in range(-3,4):
-                                    counter = 0
-                                    if 2<=pt_x+off_x<54 and 2<=pt_y+off_y<30:
-                                        for x in range(-1,2):
-                                            for y in range(-1,2):
-                                                if x!=0 and y!=0:
-                                                    if DungeonData.list_tiles[pt_x+off_x+x][pt_y+off_y+y][0]&3==2:
-                                                        counter += 1
-                                        if counter>=4:
-                                            if not is_out_of_bounds(pt_x+off_x, pt_y+off_y):
-                                                store_secondary_check(DungeonData.list_tiles[pt_x+off_x][pt_y+off_y])
                 if not ok:
                     if dir_x!=0:
                         if test:
@@ -1571,27 +1567,28 @@ def generate_ring(prop):
     list_x = [0,5,0x10,0x1C,0x27,0x33,0x38]
     list_y = [2,7,0x10,0x19,0x1E]
     grid = init_grid(max_nb_room_x, max_nb_room_y)
+    
     for i in range(6):
         grid[i][0][10]=0
         grid[i][3][10]=0
+    
     for i in range(4):
         grid[0][i][10]=0
         grid[5][i][10]=0
-
+    
     for x in range(1,5):
         for y in range(1,3):
             grid[x][y][10]=1
-
     room_nb = 0
-    for x in range(6):
-        for y in range(4):
+    for y in range(4):
+        for x in range(6):
             if grid[x][y][10]:
                 range_x = list_x[x+1]-list_x[x]-3
                 range_y = list_y[y+1]-list_y[y]-3
                 size_x = randrangeswap(5, range_x)
                 size_y = randrangeswap(4, range_y)
-                start_x = randrangeswap(0,range_x-size_x)+list_x[x]+2
-                start_y = randrangeswap(0,range_y-size_y)+list_y[y]+2
+                start_x = randrangeforce(range_x-size_x)+list_x[x]+2
+                start_y = randrangeforce(range_y-size_y)+list_y[y]+2
                 grid[x][y][0]=start_x
                 grid[x][y][2]=start_y
                 grid[x][y][4]=start_x+size_x
@@ -1654,7 +1651,7 @@ def generate_ring(prop):
     generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, prop.extra_hallways)
     generate_room_imperfections(grid, max_nb_room_x, max_nb_room_y)
 
-#US: 0233D674
+#US: 0233B61C
 def generate_crossroads(prop):
     max_nb_room_x = 5
     max_nb_room_y = 4
@@ -1678,16 +1675,16 @@ def generate_crossroads(prop):
     grid[4][3][8]=1
     
     room_nb = 0
-    for x in range(5):
-        for y in range(4):
+    for y in range(4):
+        for x in range(5):
             if grid[x][y][8]==0:
                 if grid[x][y][10]:
                     range_x = list_x[x+1]-list_x[x]-3
                     range_y = list_y[y+1]-list_y[y]-3
                     size_x = randrangeswap(5, range_x)
                     size_y = randrangeswap(4, range_y)
-                    start_x = randrangeswap(0,range_x-size_x)+list_x[x]+2
-                    start_y = randrangeswap(0,range_y-size_y)+list_y[y]+2
+                    start_x = randrangeforce(range_x-size_x)+list_x[x]+2
+                    start_y = randrangeforce(range_y-size_y)+list_y[y]+2
                     grid[x][y][0]=start_x
                     grid[x][y][2]=start_y
                     grid[x][y][4]=start_x+size_x
@@ -1737,8 +1734,8 @@ def generate_2_rooms_mh():
         range_y = list_y[y+1]-list_y[y]-3
         size_x = randrangeswap(10, range_x)
         size_y = randrangeswap(16, range_y)
-        start_x = randrangeswap(0,range_x-size_x)+list_x[x]+1
-        start_y = randrangeswap(0,range_y-size_y)+list_y[y]+1
+        start_x = randrangeforce(range_x-size_x)+list_x[x]+1
+        start_y = randrangeforce(range_y-size_y)+list_y[y]+1
         grid[x][y][0]=start_x
         grid[x][y][2]=start_y
         grid[x][y][4]=start_x+size_x
@@ -1968,7 +1965,16 @@ def generate_stairs(spawn, hidden_stairs):
                 if DungeonData.list_tiles[x][y][0]&3==1 and DungeonData.list_tiles[x][y][7]==room:
                     DungeonData.list_tiles[x][y][0]|=0x40
                     DungeonData.mh_room = DungeonData.list_tiles[x][y][7]
-        
+
+#US: 02340CE4
+def shuffle_spawns(valid_spawns):
+    for i in range(len(valid_spawns)*2):
+        a = randrange(len(valid_spawns))
+        b = randrange(len(valid_spawns))
+        tmp = valid_spawns[a]
+        valid_spawns[a] = valid_spawns[b]
+        valid_spawns[b] = tmp
+
 #US: 02340D4C
 def generate_item_spawns(prop, empty):
     if DungeonData.stairs_spawn_x==-1 or DungeonData.stairs_spawn_y==-1:
@@ -1982,13 +1988,14 @@ def generate_item_spawns(prop, empty):
         if len(valid_spawns)>0:
             stairs = randrange(len(valid_spawns))
             generate_stairs(valid_spawns[stairs], 0)
-            if not StatusData.hidden_stairs_type:
+            if StatusData.hidden_stairs_type:
                 del valid_spawns[stairs]
-                if DungeonData.floor_dungeon_number<DungeonData.floor_dungeon_max:
+                if DungeonData.floor_dungeon_number+1<DungeonData.floor_dungeon_max:
                     use_gen_1(3)
                     stairs = randrange(len(valid_spawns))
                     generate_stairs(valid_spawns[stairs], StatusData.hidden_stairs_type)
                     use_gen_0()
+    #RandomGenerator.print()
     valid_spawns = []
     for x in range(56):
         for y in range(32):
@@ -2004,12 +2011,7 @@ def generate_item_spawns(prop, empty):
             nb_items += 1
         DungeonData.nb_items = nb_items+1
         if nb_items+1>0:
-            for i in range(len(valid_spawns)):
-                a = randrange(len(valid_spawns))
-                b = randrange(len(valid_spawns))
-                tmp = valid_spawns[a]
-                valid_spawns[a] = valid_spawns[b]
-                valid_spawns[b] = tmp
+            shuffle_spawns(valid_spawns)
             start = randrange(len(valid_spawns))
             nb_items += 1
             for i in range(nb_items):
@@ -2018,6 +2020,7 @@ def generate_item_spawns(prop, empty):
                 if start==len(valid_spawns):
                     start = 0
                 DungeonData.list_tiles[c[0]][c[1]][2]|=0x2
+    #RandomGenerator.print()
     valid_spawns = []
     for x in range(56):
         for y in range(32):
@@ -2026,16 +2029,10 @@ def generate_item_spawns(prop, empty):
     if len(valid_spawns)>0:
         nb_items = prop.buried_item_density
         if nb_items!=0:
-            nb_items = max(randrange(nb_items-2,nb_items+2), 1)
+            nb_items = randrange(nb_items-2,nb_items+2)
         if nb_items>0:
-            for i in range(len(valid_spawns)):
-                a = randrange(len(valid_spawns))
-                b = randrange(len(valid_spawns))
-                tmp = valid_spawns[a]
-                valid_spawns[a] = valid_spawns[b]
-                valid_spawns[b] = tmp
+            shuffle_spawns(valid_spawns)
             start = randrange(len(valid_spawns))
-            nb_items += 1
             for i in range(nb_items):
                 c = valid_spawns[start]
                 start += 1
@@ -2046,18 +2043,14 @@ def generate_item_spawns(prop, empty):
     if not empty:
         for x in range(56):
             for y in range(32):
-                if DungeonData.list_tiles[x][y][0]&0x20==0 and DungeonData.list_tiles[x][y][0]&0x40:
+                if DungeonData.list_tiles[x][y][0]&0x20==0 and DungeonData.list_tiles[x][y][0]&0x40 \
+                    and DungeonData.list_tiles[x][y][0]&0x8==0:
                     valid_spawns.append((x, y))
     if len(valid_spawns)>0:
-        nb_items = max(6, randrange((5*len(valid_spawns))//10, (8*len(valid_spawns))//10))
+        nb_items = max(6, randrangeswap((5*len(valid_spawns))//10, (8*len(valid_spawns))//10))
         if nb_items>=StaticParam.MH_NORMAL_SPAWN_ITEM:
             nb_items = StaticParam.MH_NORMAL_SPAWN_ITEM
-        for i in range(len(valid_spawns)):
-            a = randrange(len(valid_spawns))
-            b = randrange(len(valid_spawns))
-            tmp = valid_spawns[a]
-            valid_spawns[a] = valid_spawns[b]
-            valid_spawns[b] = tmp
+        shuffle_spawns(valid_spawns)
         start = randrange(len(valid_spawns))
         for i in range(nb_items):
             c = valid_spawns[start]
@@ -2068,12 +2061,12 @@ def generate_item_spawns(prop, empty):
                 DungeonData.list_tiles[c[0]][c[1]][2]|=0x2
             elif DungeonData.free_mode or DungeonData.dungeon_number>=StaticParam.MH_MIN_TRAP_DUNGEON:
                 DungeonData.list_tiles[c[0]][c[1]][2]|=0x4
-        
+    #RandomGenerator.print()
     valid_spawns = []
     for x in range(56):
         for y in range(32):
             if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
-                and DungeonData.list_tiles[x][y][0]&0x2==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
+                and DungeonData.list_tiles[x][y][2]&0x2==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
                  and DungeonData.list_tiles[x][y][0]&0x100==0:
                 valid_spawns.append((x, y))
     if len(valid_spawns)>0:
@@ -2081,12 +2074,7 @@ def generate_item_spawns(prop, empty):
         if nb_traps>0:
             if nb_traps >= 56:
                 nb_traps = 56
-            for i in range(len(valid_spawns)):
-                a = randrange(len(valid_spawns))
-                b = randrange(len(valid_spawns))
-                tmp = valid_spawns[a]
-                valid_spawns[a] = valid_spawns[b]
-                valid_spawns[b] = tmp
+            shuffle_spawns(valid_spawns)
             start = randrange(len(valid_spawns))
             for i in range(nb_traps):
                 c = valid_spawns[start]
@@ -2111,7 +2099,6 @@ def generate_item_spawns(prop, empty):
             spawn = valid_spawns[randrange(len(valid_spawns))]
             DungeonData.player_spawn_x = spawn[0]
             DungeonData.player_spawn_y = spawn[1]
-    return #TODO
 
 #US: 02341470
 def generate_monster_spawns(prop, empty):
@@ -2128,15 +2115,10 @@ def generate_monster_spawns(prop, empty):
                 and DungeonData.list_tiles[x][y][2]&0x2==0 and DungeonData.list_tiles[x][y][2]&0x1==0 and DungeonData.list_tiles[x][y][0]&0x8==0 \
                  and DungeonData.list_tiles[x][y][0]&0x100==0:
                 if DungeonData.player_spawn_x!=x or DungeonData.player_spawn_y!=y:
-                    if StatusData.has_monster_house==0 or DungeonData.mh_room!=DungeonData.list_tiles[x][y][7]:
+                    if StatusData.no_enemy_spawn==0 or DungeonData.mh_room!=DungeonData.list_tiles[x][y][7]:
                         valid_spawns.append((x, y))
     if len(valid_spawns)>0 and enemies+1>0:
-        for i in range(len(valid_spawns)):
-            a = randrange(len(valid_spawns))
-            b = randrange(len(valid_spawns))
-            tmp = valid_spawns[a]
-            valid_spawns[a] = valid_spawns[b]
-            valid_spawns[b] = tmp
+        shuffle_spawns(valid_spawns)
         enemies += 1
         start = randrange(len(valid_spawns))
         for i in range(enemies):
@@ -2155,19 +2137,14 @@ def generate_monster_spawns(prop, empty):
         for x in range(56):
             for y in range(32):
                 if DungeonData.list_tiles[x][y][0]&0x3==1 and DungeonData.list_tiles[x][y][7]!=0xFF and DungeonData.list_tiles[x][y][0]&0x20==0 \
-                   and DungeonData.list_tiles[x][y][0]&0x100==0 and DungeonData.list_tiles[x][y][0]&0x40==0:
+                   and DungeonData.list_tiles[x][y][0]&0x100==0 and DungeonData.list_tiles[x][y][0]&0x40:
                     if DungeonData.player_spawn_x!=x or DungeonData.player_spawn_y!=y:
                         valid_spawns.append((x, y))
         if len(valid_spawns)>0:
             enemies = max(1, randrange((7*len(valid_spawns))//10, (8*len(valid_spawns))//10))
             if enemies>=mh_spawn:
                 enemies = mh_spawn
-            for i in range(len(valid_spawns)):
-                a = randrange(len(valid_spawns))
-                b = randrange(len(valid_spawns))
-                tmp = valid_spawns[a]
-                valid_spawns[a] = valid_spawns[b]
-                valid_spawns[b] = tmp
+            shuffle_spawns(valid_spawns)
             start = randrange(len(valid_spawns))
             for i in range(enemies):
                 c = valid_spawns[start]
@@ -2270,6 +2247,7 @@ def generate_floor():
     StatusData.mh_chance = Properties.mh_chance
     StatusData.kecleon_chance = Properties.kecleon_chance
     StatusData.middle_room_secondary = Properties.middle_room_secondary
+    StatusData.hidden_stairs_type = Properties.hidden_stairs_type+1
     gen_attempts2 = 0
     while gen_attempts2<10:
         DungeonData.player_spawn_x = -1
@@ -2283,6 +2261,7 @@ def generate_floor():
 
         fixed_room = 0
         while gen_attempts<10:
+            #RandomGenerator.print()
             ReturnData.invalid_generation = False
             if fixed_room==0:
                 if 0<DungeonData.fixed_floor_number<0xA5:
@@ -2398,15 +2377,20 @@ def generate_floor():
             DungeonData.create_mh = 1
         generate_junctions()
         if secondary_gen:
+            #RandomGenerator.print()
             generate_secondary(1, prop)
+            #RandomGenerator.print()
         
         if randrange(100)<prop.empty_mh_chance:
             empty = True
         else:
             empty = False
-            
+
+        #RandomGenerator.print()
         generate_item_spawns(prop,empty)
+        #RandomGenerator.print()
         generate_monster_spawns(prop,empty)
+        #RandomGenerator.print()
         clear_safe()
 
         if DungeonData.player_spawn_x!=-1 and DungeonData.player_spawn_y!=-1:

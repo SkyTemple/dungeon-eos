@@ -53,7 +53,21 @@ def randrange(a,b=None):
     if RandomGenerator.log:
         print("RN:",r)
     return r
-    
+
+
+def randrangeswap(a,b):
+    if a==b:
+        return a
+    if a>b:
+        return randrange(b,a)
+    return randrange(a,b)
+
+
+def randrangeforce(a):
+    if a==0:
+        random()
+        return 0
+    return randrange(a)
 
 #US: 022EAC4C
 def use_gen_1(use_seed):

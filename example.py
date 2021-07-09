@@ -6,32 +6,32 @@ from DungeonAlgorithm import *
 # PIL is not required for the main algorithm
 from PIL import Image
 
-"""
+
 # To use specific seeds
 RandomGenerator.gen_type = 0
 RandomGenerator.count = 1
-RandomGenerator.seed_old_t0 = 0x0233A86C
-RandomGenerator.seed_t0 = 0x059CFB28
+RandomGenerator.seed_old_t0 = 0x8AF812DD
+RandomGenerator.seed_t0 = 0x50DA5D9E
 RandomGenerator.use_seed_t1 = 4
-RandomGenerator.seeds_t1 = [0x80CAA4C8, 0x0024ED91, 0x0024ED91, 0x0024ED91, 0x728E13F8]
-"""
+RandomGenerator.seeds_t1 = [0x74AD7AAA, 0x00F891D9, 0x00F891D9, 0x00F891D9, 0x5100FC60]
+
 
 # A test with several parameters
-Properties.layout = 10
+Properties.layout = 2
 Properties.mh_chance = 100
-Properties.kecleon_chance = 100
-Properties.middle_room_secondary = 10
+Properties.kecleon_chance = 0
+Properties.middle_room_secondary = 1
 Properties.nb_rooms = 5
-Properties.bit_flags = 0x0
-Properties.floor_connectivity = 3
+Properties.bit_flags = 0x1
+Properties.floor_connectivity = 15
 Properties.maze_chance = 0
-Properties.dead_end = 0
-Properties.extra_hallways = 40
-Properties.secondary_density = 0
-Properties.enemy_density = 4
-Properties.item_density = 1
-Properties.buried_item_density = 0
-Properties.trap_density = 3
+Properties.dead_end = 1
+Properties.extra_hallways = 10
+Properties.secondary_density = 4
+Properties.enemy_density = 8
+Properties.item_density = 12
+Properties.buried_item_density = 4
+Properties.trap_density = 8
 StaticParam.PATCH_APPLIED = 0
 StaticParam.FIX_DEAD_END_ERROR = 0
 StaticParam.FIX_OUTER_ROOM_ERROR = 0
