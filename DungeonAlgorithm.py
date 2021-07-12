@@ -81,6 +81,7 @@ class StaticParam:
                0,0,0,0,1,0,1,0,
                0,0,1,0,1,0,0,0]
 
+#US: 0x02353538
 class DungeonData: # Dungeon structure
     maze_value = 0
     dungeon_number = 1 #0x748
@@ -935,10 +936,10 @@ def generate_kecleon_shop(grid, max_nb_room_x, max_nb_room_y, kecleon_chance):
                                     DungeonData.kecleon_shop_min_y = 9999
                                     DungeonData.kecleon_shop_max_x = -9999
                                     DungeonData.kecleon_shop_max_y = -9999
-                                    for cur_x in range(StatusData.kecleon_shop_min_x, StatusData.kecleon_shop_max_x):
-                                        for cur_y in range(StatusData.kecleon_shop_min_y, StatusData.kecleon_shop_max_y):
+                                    for cur_x in range(StatusData.kecleon_shop_min_x+1, StatusData.kecleon_shop_max_x-1):
+                                        for cur_y in range(StatusData.kecleon_shop_min_y+1, StatusData.kecleon_shop_max_y-1):
                                             DungeonData.list_tiles[cur_x][cur_y][0] |= 0x20
-                                            DungeonData.list_tiles[cur_x][cur_y][2] &= 0x9
+                                            DungeonData.list_tiles[cur_x][cur_y][2] &= ~0x9
                                             if cur_x<=DungeonData.kecleon_shop_min_x:
                                                 DungeonData.kecleon_shop_min_x = cur_x
                                             if cur_y<=DungeonData.kecleon_shop_min_y:
@@ -1383,10 +1384,10 @@ def reset_y_borders():
     for x in range(56):
         DungeonData.list_tiles[x][1]=TileData()
         if x==0 or x==55:
-            DungeonData.list_tiles[x][1][0]&=0x10
+            DungeonData.list_tiles[x][1][0]|=0x10
         DungeonData.list_tiles[x][0x1E]=TileData()
         if x==0 or x==55:
-            DungeonData.list_tiles[x][0x1E][0]&=0x10
+            DungeonData.list_tiles[x][0x1E][0]|=0x10
 
 #US: 02340A78
 def delete_status_10():
@@ -1511,6 +1512,7 @@ def generate_secondary(test_attrib, prop):
                         dir_y = 0
                 if pt_y<0 or pt_y>=32:
                     ok = True
+        #RandomGenerator.print()
         for i in range(prop.secondary_density):
             attempts = 0
             while attempts<200:
@@ -1756,14 +1758,14 @@ def generate_room_line(prop):
     max_nb_room_x = 5
     max_nb_room_y = 1
     list_x = [0,0xB,0x16,0x21,0x2C,0x38]
-    list_y = [2,0xF]
+    list_y = [4,0xF]
     grid = init_grid(max_nb_room_x, max_nb_room_y)
     place_rooms(grid, max_nb_room_x, max_nb_room_y, prop.nb_rooms)
     create_rooms(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, prop.bit_flags)
     rnd_x = randrange(max_nb_room_x)
     rnd_y = randrange(max_nb_room_y)
     create_connections(grid, max_nb_room_x, max_nb_room_y, rnd_x, rnd_y, prop)
-    create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, 0)
+    create_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y, 1)
     add_hallways(grid, max_nb_room_x, max_nb_room_y, list_x, list_y)
     generate_kecleon_shop(grid, max_nb_room_x, max_nb_room_y, StatusData.kecleon_chance)
     generate_monster_house(grid, max_nb_room_x, max_nb_room_y, StatusData.mh_chance)
@@ -1819,8 +1821,8 @@ def merge_rooms(room_x, room_y1, room_y2, grid):
     grid[room_x][room_y1][6] = dst_y
     grid[room_x][room_y1][0x12] = 1
     grid[room_x][room_y2][0x12] = 1
-    grid[room_x][room_y1][0xb] = 0
-    grid[room_x][room_y1][0x11] = 1
+    grid[room_x][room_y2][0xb] = 0
+    grid[room_x][room_y2][0x11] = 1
     
 #US: 0233BD74
 def generate_beetle(prop):
@@ -2222,6 +2224,7 @@ def test_reachable(xpos,ypos,mark_invalid):
                         return False
     return True
 
+#US: 02340B0C
 def reinit_tiles():
     DungeonData.clear_tiles()
     for x in range(56):
@@ -2237,9 +2240,11 @@ def reinit_tiles():
     DungeonData.nb_active_items = 0
     DungeonData.clear_active_traps()
 
+#US: ???
 def process_fixed_room(fixed_floor_number, prop):
     return True # TODO
 
+#US: 0233A6D8
 def generate_floor():
     StatusData.floor_size = 0
     prop = Properties
@@ -2379,7 +2384,6 @@ def generate_floor():
         if secondary_gen:
             #RandomGenerator.print()
             generate_secondary(1, prop)
-            #RandomGenerator.print()
         
         if randrange(100)<prop.empty_mh_chance:
             empty = True
@@ -2404,11 +2408,12 @@ def generate_floor():
         if StaticParam.SHOW_ERROR:
             ReturnData.invalid_generation = True
             break
+    print(gen_attempts2)
     if gen_attempts2==10:
         ReturnData.invalid_generation = True
         StatusData.kecleon_shop_middle_x = -1
         StatusData.kecleon_shop_middle_y = -1
-        ##Unknown Call to 02340B0C
+        reinit_tiles()
         generate_one_mh_room()
         DungeonData.create_mh = 1
         generate_junctions()
