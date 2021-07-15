@@ -1,5 +1,5 @@
-from RandomGen import *
-from DungeonAlgorithm import *
+from dungeon_eos.RandomGen import *
+from dungeon_eos.DungeonAlgorithm import *
 
 # This test uses PIL to show the final map
 # Make sure PIL is installed to run this

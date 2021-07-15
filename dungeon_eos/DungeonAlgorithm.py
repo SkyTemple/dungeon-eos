@@ -1,4 +1,4 @@
-from RandomGen import *
+from dungeon_eos.RandomGen import *
 
 class Properties: # Floor Properties
     layout = 1
