@@ -12,7 +12,6 @@ setup(
   author = 'irdkwia idkmn', 
   author_email = 'irdkwia2000@gmail.com', 
   url = 'https://github.com/irdkwia/dungeon_eos/',
-  download_url = '???', 
   keywords = ['Dungeon', 'PMD', 'Explorers', 'Generator'],
   install_requires=[],
   classifiers=[
