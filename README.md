@@ -1,4 +1,4 @@
-# EoS-dungeon-algorithm
+# dungeon-eos
 An attempt to reproduce eos's dungeon algorithm.
 
 ## How to use
