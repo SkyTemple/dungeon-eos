@@ -421,7 +421,7 @@ def create_connections(grid, max_nb_room_x, max_nb_room_y, pt_x, pt_y, prop):
                             rnd_num &= 3
                             ### WARNING! Not consistent with the original code!
                             ### That part is bugged in the actual version
-                            if StatusData.FIX_DEAD_END_ERROR:
+                            if StaticParam.FIX_DEAD_END_ERROR:
                                 if rnd_num==0 and grid[x+1][y][8]==0:
                                     grid[x][y][0x16] = 1
                                     grid[x+1][y][0x15] = 1
@@ -2408,7 +2408,6 @@ def generate_floor():
         if StaticParam.SHOW_ERROR:
             ReturnData.invalid_generation = True
             break
-    print(gen_attempts2)
     if gen_attempts2==10:
         ReturnData.invalid_generation = True
         StatusData.kecleon_shop_middle_x = -1
