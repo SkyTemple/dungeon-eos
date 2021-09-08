@@ -1,4 +1,5 @@
-__version__ = '0.0.2'
+__version__ = '0.0.4'
+
 import os
 
 from setuptools import setup, find_packages
@@ -7,7 +8,6 @@ setup(
   name = 'dungeon-eos', 
   packages = find_packages(),
   version = __version__,
-  license='GPL',
   description = 'A package that simulates PMD EoS dungeon generation. ',
   author = 'irdkwia idkmn', 
   author_email = 'irdkwia2000@gmail.com', 
