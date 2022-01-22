@@ -9,9 +9,9 @@ setup(
   packages = find_packages(),
   version = __version__,
   description = 'A package that simulates PMD EoS dungeon generation. ',
-  author = 'irdkwia idkmn', 
-  author_email = 'irdkwia2000@gmail.com', 
-  url = 'https://github.com/irdkwia/dungeon_eos/',
+  author = 'SkyTemple contributors', 
+  author_email = 'skytemple@capypara.de', 
+  url = 'https://github.com/SkyTemple/dungeon_eos/',
   keywords = ['Dungeon', 'PMD', 'Explorers', 'Generator'],
   install_requires=[],
   classifiers=[
