@@ -1,5 +1,11 @@
-from dungeon_eos.RandomGen import *
-from dungeon_eos.DungeonAlgorithm import *
+try:
+    from dungeon_eos.RandomGen import *
+    from dungeon_eos.DungeonAlgorithm import *
+except ModuleNotFoundError:
+    import sys
+    sys.path.append("..")
+    from dungeon_eos.RandomGen import *
+    from dungeon_eos.DungeonAlgorithm import *
 
 # This test uses PIL to show the final map
 # Make sure PIL is installed to run this
