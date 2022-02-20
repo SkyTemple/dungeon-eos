@@ -56,7 +56,7 @@ class StaticParam:
     MERGE_CHANCE = 5 # Originally 5%
     IMPERFECT_CHANCE = 60 # Originally 60%
     SECONDARY_CHANCE = 80 # Originally 80%
-    MH_NORMAL_SPAWN_ENM = 20 # Originally 20
+    MH_NORMAL_SPAWN_ENM = 30 # Originally 30
     MH_NORMAL_SPAWN_ITEM = 7 # Originally 7
     MH_MIN_TRAP_DUNGEON = 28 # Originally 28
     PATCH_APPLIED = 0
@@ -148,7 +148,7 @@ class GridCell:
                    0x2: "start_y",
                    0x4: "end_x",
                    0x6: "end_y",
-                   0x8: "valid_cell",
+                   0x8: "invalid_cell",
                    0x9: "unk1",
                    0xa: "is_room",
                    0xb: "is_connected",
@@ -873,7 +873,7 @@ def mazify(grid, max_nb_room_x, max_nb_room_y, maze_chance):
                             if (grid[x][y][4]-grid[x][y][0])&1 and (grid[x][y][6]-grid[x][y][2])&1:
                                 nb_valid += 1
                 if nb_valid>0:
-                    values = [i==0 for i in range(100)]
+                    values = [i==0 for i in range(0x100)]
                     for x in range(0x40):
                         a = randrange(nb_valid)
                         b = randrange(nb_valid)
@@ -1038,8 +1038,8 @@ def generate_extra_hallways(grid, max_nb_room_x, max_nb_room_y, extra_hallways):
                     ok = False
             if DungeonData.list_tiles[cur_x][cur_y][0]!=2:
                 valid = True
-                for x in range(cur_x-2, cur_x+2):
-                    for y in range(cur_y-2, cur_y+2):
+                for x in range(cur_x-2, cur_x+3):
+                    for y in range(cur_y-2, cur_y+3):
                         if x<0 or x>=56 or y<0 or y>=32:
                             valid = False
                             break
@@ -1665,7 +1665,7 @@ def generate_crossroads(prop):
         grid[i][3][10]=1
     for i in range(4):
         grid[0][i][10]=1
-        grid[5][i][10]=1
+        grid[4][i][10]=1
 
     for x in range(1,4):
         for y in range(1,3):
@@ -1863,11 +1863,11 @@ def generate_outer_room_floor(max_nb_room_x, max_nb_room_y, prop):
     if StaticParam.FIX_OUTER_ROOM_ERROR:
         for x in range(max_nb_room_x):
             if x>0:
-                grid[x][0][0x16] = 1
-                grid[x][max_nb_room_y-1][0x16] = 1
+                grid[x][0][0x15] = 1
+                grid[x][max_nb_room_y-1][0x15] = 1
             if x<max_nb_room_x-1:
-                grid[x+1][0][0x15] = 1
-                grid[x+1][max_nb_room_y-1][0x15] = 1
+                grid[x+1][0][0x16] = 1
+                grid[x+1][max_nb_room_y-1][0x16] = 1
         for y in range(max_nb_room_y):
             if y>0:
                 grid[0][y][0x13] = 1
@@ -2268,7 +2268,7 @@ def generate_floor():
         while gen_attempts<10:
             #RandomGenerator.print()
             ReturnData.invalid_generation = False
-            if fixed_room==0:
+            if fixed_room!=0:
                 if 0<DungeonData.fixed_floor_number<0xA5:
                     break
                 fixed_room = 0
@@ -2289,6 +2289,7 @@ def generate_floor():
             if DungeonData.fixed_floor_number!=0:
                 if not process_fixed_room(DungeonData.fixed_floor_number, prop):
                     fixed_room = 1
+                break
             
             max_nb_room_x = 2 # [r13,#+0x8]
             max_nb_room_y = 2 # [r13,#+0x4]
